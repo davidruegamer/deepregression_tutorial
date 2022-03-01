@@ -145,6 +145,70 @@ res_cv <- mod_cv %>% cv(
 plot_cv(res_cv)
 ```
 
+### Ensembling
+
+```{r}
+mod <- deepregression(
+  y = y, 
+  data = airbnb,
+  list_of_formulas = list(
+    location = ~ 1 + s(longitude),
+    scale = ~ 1 + s(longitude)
+  ),
+  list_of_deep_models = NULL,
+  optimizer = optimizer_adam(learning_rate = 0.1, decay = 1e-4)
+)
+
+ens <- ensemble(mod, n_ensemble = 5, epochs = 1000, early_stopping = TRUE,
+                validation_split = 0.2)
+
+```
+
+```{r}
+mems <- deepregression:::.call_for_all_members(ens, get_distribution)
+ensd <- get_ensemble_distribution(ens)
+
+obs_idx <- 1
+
+ys <- seq(min(y), max(y), length.out = 1e3)
+mem_preds <- do.call("cbind", lapply(mems, function(x) tfd_prob(x, ys)$numpy()[obs_idx, ]))
+ens_preds <- tfd_prob(ensd, ys)$numpy()[obs_idx, ]
+
+avg_nll <- mean(unlist(lapply(mems, function(x) - mean(as.matrix(tfd_log_prob(x, y))[obs_idx]))))
+ens_nll <- - mean(as.matrix(tfd_log_prob(ensd, y))[obs_idx])
+
+matplot(ys, mem_preds, type = "l", lty = 2, col = "gray80", xlab = "log price",
+        ylab = "density")
+abline(v = y[obs_idx], col = "cornflowerblue")
+lines(ys, ens_preds, lwd = 1)
+legend("topright", c("Individual prediction", "Ensemble prediction", "Observation"),
+       col = c("gray80", "black", "cornflowerblue"), lty = c(2, 1, 1), lwd = 2, bty = "n")
+legend("right", paste(c("Average    NLL:", "Ensemble NLL:"), 
+                      round(c(avg_nll, ens_nll), 3)), bty = "n")
+
+```
+
+
+```{r}
+lons <- seq(min(airbnb$longitude), max(airbnb$longitude), length.out = 1e3)
+nd <- data.frame(longitude = lons)
+mems <- deepregression:::.call_for_all_members(ens, get_distribution, data = nd)
+ensd <- get_ensemble_distribution(ens, data = nd)
+mem_preds <- do.call("cbind", lapply(mems, function(x) as.matrix(tfd_mean(x))))
+ens_preds <- as.matrix(tfd_mean(ensd))
+alea <- as.matrix(tfd_stddev(ensd))
+unc <- apply(mem_preds, 1, sd)
+
+matplot(lons, mem_preds, lty = 2, lwd = 1, col = "gray80", type = "l",
+        xlab = "longitude", ylab = "Expected log price")
+lines(lons, ens_preds)
+lines(lons, ens_preds - unc)
+lines(lons, ens_preds + unc)
+legend("top", c("Individual prediction", "Ensemble prediction"),
+       col = c("gray80", "black"), lty = c(2, 1), lwd = 2, bty = "n")
+```
+
+
 ## Other methods
 
 
