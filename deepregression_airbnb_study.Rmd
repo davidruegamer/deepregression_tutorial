@@ -204,8 +204,12 @@ ens_preds <- as.matrix(tfd_mean(ensd))
 alea <- as.matrix(tfd_stddev(ensd))
 unc <- apply(mem_preds, 1, sd)
 
-# pdat <- data.frame(lons = lons, preds = mem_preds, unc = unc)
+# pdat <- data.frame(lons = lons, preds = mem_preds, ens_preds = ens_preds, unc = unc)
 # write.csv(pdat, "ens-pred.csv", row.names = FALSE, quote = FALSE)
+# 
+# lons <- pdat$lons
+# mem_preds <- pdat[, 2:6]
+# ens_preds <- pdat$ens_preds
 
 # pdf("ens-pred.pdf", height = 4, width = 6)
 matplot(lons, mem_preds, lty = 2, col = "gray50", type = "l", las = 1,
@@ -215,7 +219,7 @@ lines(lons, ens_preds - unc, lwd = 1.3)
 lines(lons, ens_preds + unc, lwd = 1.3)
 polygon(c(lons, rev(lons)), c(ens_preds - unc, rev(ens_preds + unc)),
         col = rgb(.1, .1, .1, .1), border = NA)
-points(airbnb$longitude, y, pch = 20, cex = 0.5, col = rgb(.1, .1, .1, .1))
+# points(airbnb$longitude, y, pch = 20, cex = 0.5, col = rgb(.1, .1, .1, .1))
 legend("topright", c("Individual prediction", "Ensemble prediction"),
        col = c("gray50", "black"), lty = c(2, 1), lwd = 2, bty = "n")
 # dev.off()
