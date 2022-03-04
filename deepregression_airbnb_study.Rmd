@@ -145,82 +145,6 @@ res_cv <- mod_cv %>% cv(
 plot_cv(res_cv)
 ```
 
-### Ensembling
-
-```{r}
-mod <- deepregression(
-  y = y, 
-  data = airbnb,
-  list_of_formulas = list(
-    location = ~ 1 + s(longitude),
-    scale = ~ 1 + s(longitude)
-  ),
-  list_of_deep_models = NULL,
-  optimizer = optimizer_adam(learning_rate = 0.1, decay = 1e-4)
-)
-
-ens <- ensemble(mod, n_ensemble = 5, epochs = 1000, early_stopping = TRUE,
-                validation_split = 0.2)
-
-```
-
-```{r}
-mems <- deepregression:::.call_for_all_members(ens, get_distribution)
-ensd <- get_ensemble_distribution(ens)
-
-obs_idx <- 1
-
-ys <- seq(min(y), max(y), length.out = 1e3)
-mem_preds <- do.call("cbind", lapply(mems, function(x) tfd_prob(x, ys)$numpy()[obs_idx, ]))
-ens_preds <- tfd_prob(ensd, ys)$numpy()[obs_idx, ]
-
-avg_nll <- mean(unlist(lapply(mems, function(x) - mean(as.matrix(tfd_log_prob(x, y))))))
-ens_nll <- - mean(as.matrix(tfd_log_prob(ensd, y)))
-
-# pdat <- data.frame(y = ys, preds = mem_preds, obs = y[obs_idx])
-# write.csv(pdat, "ens-dens.csv", row.names = FALSE, quote = FALSE)
-
-# pdf("ens-dens.pdf", height = 4, width = 6)
-matplot(ys, mem_preds, type = "l", lty = 2, col = "gray80", xlab = "log-price",
-        ylab = "predicted density", las = 1, lwd = 1.3)
-abline(v = y[obs_idx], col = "cornflowerblue")
-lines(ys, ens_preds, lwd = 1.3)
-legend("topright", c("Individual prediction", "Ensemble prediction", "Observation"),
-       col = c("gray80", "black", "cornflowerblue"), lty = c(2, 1, 1), lwd = 2, bty = "n")
-# legend("right", paste(c("Average    NLL:", "Ensemble NLL:"), 
-                      # round(c(avg_nll, ens_nll), 3)), bty = "n")
-# dev.off()
-
-```
-
-
-```{r}
-lons <- seq(min(airbnb$longitude), max(airbnb$longitude), length.out = 1e3)
-nd <- data.frame(longitude = lons)
-mems <- deepregression:::.call_for_all_members(ens, get_distribution, data = nd)
-ensd <- get_ensemble_distribution(ens, data = nd)
-mem_preds <- do.call("cbind", lapply(mems, function(x) as.matrix(tfd_mean(x))))
-ens_preds <- as.matrix(tfd_mean(ensd))
-alea <- as.matrix(tfd_stddev(ensd))
-unc <- apply(mem_preds, 1, sd)
-
-# pdat <- data.frame(lons = lons, preds = mem_preds, unc = unc)
-# write.csv(pdat, "ens-pred.csv", row.names = FALSE, quote = FALSE)
-
-# pdf("ens-pred.pdf", height = 4, width = 6)
-matplot(lons, mem_preds, lty = 2, col = "gray50", type = "l", las = 1,
-        xlab = "longitude", ylab = "Expected log-price", lwd = 1.3)
-lines(lons, ens_preds, lwd = 1.3)
-lines(lons, ens_preds - unc, lwd = 1.3)
-lines(lons, ens_preds + unc, lwd = 1.3)
-polygon(c(lons, rev(lons)), c(ens_preds - unc, rev(ens_preds + unc)),
-        col = rgb(.1, .1, .1, .1), border = NA)
-points(airbnb$longitude, y, pch = 20, cex = 0.5, col = rgb(.1, .1, .1, .1))
-legend("topright", c("Individual prediction", "Ensemble prediction"),
-       col = c("gray50", "black"), lty = c(2, 1), lwd = 2, bty = "n")
-# dev.off()
-```
-
 
 ## Other methods
 
@@ -501,4 +425,142 @@ mod_cnn %>% fit(
 coef(mod_cnn)
 ```
 
+## Uncertainty quantification
+
+### Quantifying predictive uncertainty
+
+```{r}
+mod <- deepregression(
+  y = y, 
+  data = airbnb,
+  list_of_formulas = list(
+    location = ~ 1 + s(longitude),
+    scale = ~ 1 + s(longitude)
+  ),
+  list_of_deep_models = NULL,
+  optimizer = optimizer_adam(learning_rate = 0.1, decay = 1e-4)
+)
+
+ens <- ensemble(mod, n_ensemble = 5, epochs = 1000, early_stopping = TRUE,
+                validation_split = 0.2)
+
+```
+
+```{r}
+mems <- deepregression:::.call_for_all_members(ens, get_distribution)
+ensd <- get_ensemble_distribution(ens)
+
+obs_idx <- 1
+
+ys <- seq(min(y), max(y), length.out = 1e3)
+mem_preds <- do.call("cbind", lapply(mems, function(x) tfd_prob(x, ys)$numpy()[obs_idx, ]))
+ens_preds <- tfd_prob(ensd, ys)$numpy()[obs_idx, ]
+
+avg_nll <- mean(unlist(lapply(mems, function(x) - mean(as.matrix(tfd_log_prob(x, y))))))
+ens_nll <- - mean(as.matrix(tfd_log_prob(ensd, y)))
+
+# pdat <- data.frame(y = ys, preds = mem_preds, obs = y[obs_idx])
+# write.csv(pdat, "ens-dens.csv", row.names = FALSE, quote = FALSE)
+
+# pdf("ens-dens.pdf", height = 4, width = 6)
+matplot(ys, mem_preds, type = "l", lty = 2, col = "gray80", xlab = "log-price",
+        ylab = "predicted density", las = 1, lwd = 1.3)
+abline(v = y[obs_idx], col = "cornflowerblue")
+lines(ys, ens_preds, lwd = 1.3)
+legend("topright", c("Individual prediction", "Ensemble prediction", "Observation"),
+       col = c("gray80", "black", "cornflowerblue"), lty = c(2, 1, 1), lwd = 2, bty = "n")
+# legend("right", paste(c("Average    NLL:", "Ensemble NLL:"), 
+                      # round(c(avg_nll, ens_nll), 3)), bty = "n")
+# dev.off()
+
+```
+
+
+```{r}
+lons <- seq(min(airbnb$longitude), max(airbnb$longitude), length.out = 1e3)
+nd <- data.frame(longitude = lons)
+mems <- deepregression:::.call_for_all_members(ens, get_distribution, data = nd)
+ensd <- get_ensemble_distribution(ens, data = nd)
+mem_preds <- do.call("cbind", lapply(mems, function(x) as.matrix(tfd_mean(x))))
+ens_preds <- as.matrix(tfd_mean(ensd))
+alea <- as.matrix(tfd_stddev(ensd))
+unc <- apply(mem_preds, 1, sd)
+
+# pdat <- data.frame(lons = lons, preds = mem_preds, unc = unc)
+# write.csv(pdat, "ens-pred.csv", row.names = FALSE, quote = FALSE)
+
+# pdf("ens-pred.pdf", height = 4, width = 6)
+matplot(lons, mem_preds, lty = 2, col = "gray50", type = "l", las = 1,
+        xlab = "longitude", ylab = "Expected log-price", lwd = 1.3)
+lines(lons, ens_preds, lwd = 1.3)
+lines(lons, ens_preds - unc, lwd = 1.3)
+lines(lons, ens_preds + unc, lwd = 1.3)
+polygon(c(lons, rev(lons)), c(ens_preds - unc, rev(ens_preds + unc)),
+        col = rgb(.1, .1, .1, .1), border = NA)
+points(airbnb$longitude, y, pch = 20, cex = 0.5, col = rgb(.1, .1, .1, .1))
+legend("topright", c("Individual prediction", "Ensemble prediction"),
+       col = c("gray50", "black"), lty = c(2, 1), lwd = 2, bty = "n")
+# dev.off()
+```
+
+### Last layer statistical inference
+
+```{r}
+deep_model <- function(x)
+{
+  x %>% 
+    layer_dense(units = 5, activation = "relu", use_bias = FALSE) %>%
+    layer_dense(units = 3, activation = "linear", name = "penultimate_layer") %>%
+    layer_dense(units = 1, activation = "linear")
+}
+```
+
+
+```{r}
+mod <- deepregression(
+  y = y, 
+  data = airbnb,
+  list_of_formulas = list(
+    location = ~ 1 + beds + s(accommodates, bs = "ps") +
+      s(days_since_last_review, bs = "tp") + 
+      deep(review_scores_rating, reviews_per_month),
+    scale = ~1
+  ),
+  list_of_deep_models = list(deep = deep_model)
+)
+```
+
+```{r}
+mod %>% fit(
+  epochs = 100, 
+  verbose = FALSE, 
+  view_metrics = FALSE,
+  validation_split = 0.2
+  )
+```
+
+```{r}
+intermediate_mod <- keras_model(mod$model$input, mod$model$get_layer(
+  name="penultimate_layer")$output
+  )
+newdata_processed <- prepare_newdata(
+  mod$init_params$parsed_formulas_contents, 
+  airbnb, 
+  gamdata = mod$init_params$gamdata$data_trafos
+  )
+tilde_u <- as.data.frame(intermediate_mod$predict(newdata_processed))
+str(tilde_u, 1)
+```
+
+```{r}
+gam_mod <- gam(log(price) ~ 
+  1 + beds + s(accommodates, bs = "ps") + 
+  s(days_since_last_review, bs = "tp") + 
+    V1 + V2 + V3,
+  data = 
+    cbind(as.data.frame(airbnb), 
+      tilde_u)
+  )
+plot(gam_mod, pages = 1)
+```
 
